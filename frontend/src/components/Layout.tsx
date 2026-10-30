@@ -100,7 +100,7 @@ function DatasetSwitch() {
   );
 }
 
-const MODEL_LABEL: Record<string, string> = { xai: "Grok", nim: "Nemotron (fast)", "nim-reason": "Nemotron (reasoning)", "nim-backup": "Nemotron Ultra (backup)", nightshift: "Meterless Nightshift (this PC)", ollama: "Ollama" };
+const MODEL_LABEL: Record<string, string> = { tf: "Nemotron 3 Super (Token Factory)", "tf-reason": "Nemotron 3 Super, reasoning (Token Factory)", "tf-backup": "Nemotron 3 Ultra (Token Factory backup)", xai: "Grok", nim: "Nemotron (fast)", "nim-reason": "Nemotron (reasoning)", "nim-backup": "Nemotron Ultra (backup)", nightshift: "Meterless Nightshift (this PC)", ollama: "Ollama" };
 
 export function Layout() {
   const s = useStatus();
@@ -135,9 +135,9 @@ export function Layout() {
             <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Systems</div>
             {s ? (
               <>
-                <StatusRow ok={zetaris ? s.harness.ok : null} label={zetaris ? "Zetaris" : "Local data (fallback)"} detail={zetaris ? "federated" : s.harness.erp} />
-                <StatusRow ok={s.memory.online ? true : null} label={s.memory.online ? "Meterless memory" : "Memory (local file)"}
-                  detail={s.memory.embedder?.includes("nemotron") ? "Nemotron embeddings" : undefined} below />
+                <StatusRow ok={zetaris ? s.harness.ok : null} label={zetaris ? "Zetaris" : "Local SQL (DuckDB)"} detail={zetaris ? "federated" : s.harness.erp} />
+                <StatusRow ok={s.memory.online ? true : null} label={s.memory.backend === "meterless" ? "Meterless memory" : "WhyChain memory"}
+                  detail={s.memory.embedder?.includes("Qwen") ? "Qwen3 embeddings · Token Factory" : s.memory.embedder?.includes("nemotron") ? "Nemotron embeddings" : "keyword recall"} below />
                 {s.memory.scout && <StatusRow ok={true} label="Meterless Scout" detail="routes every question" below />}
                 {/* only the model providers this install actually uses; optional ones that aren't set are not listed */}
                 {Object.entries(s.models)

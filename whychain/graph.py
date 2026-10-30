@@ -177,7 +177,8 @@ def investigate(question: str, harness_pref: str | None = None, listener=None, c
     t.event("run_start", "System", question=question, dataset=ds_key, harness=ctx.harness.name, harness_notes=notes,
             memory=ctx.memory.status(), models=ctx.llm.available(), today=str(date.today()), code=version,
             private_docs=bool(getattr(ctx.llm, "private_docs", False)))
-    # which part of WhyChain answers: Meterless Scout Intent when it is confident, the word rules otherwise
+    # which part of WhyChain answers: its injection guard first, then its word rules (or the optional Meterless Scout
+    # Intent adapter, when that bridge is connected and confident)
     from whychain import scout
 
     rules = scout.rules_route(question, ctx)
@@ -188,8 +189,9 @@ def investigate(question: str, harness_pref: str | None = None, listener=None, c
             agrees=(route == rules or (route == "refuse" and rules == "off_topic")), **scout.summary(decision))
     if route == "refuse":
         flags = ", ".join(scout.summary(decision).get("flags") or []) or "prompt injection"
-        brief = ("## Answer\nThis reads as instructions aimed at the agents, not a question about the data (Meterless "
-                 f"Scout's guard: {flags}). Nothing was investigated and no model was called.")
+        who = "WhyChain's guard" if by == "guard" else "Meterless Scout's guard"
+        brief = ("## Answer\nThis reads as instructions aimed at the agents, not a question about the data "
+                 f"({who}: {flags}). Nothing was investigated and no model was called.")
         final = {"question": question, "headline": "Not investigated: the question contains instructions for the agents.",
                  "brief": brief, "tasks": [], "findings": [], "evidence": {}, "verdicts": {}, "actions": [],
                  "risks": [], "evaluations": [], "round": 0}

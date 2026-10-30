@@ -2,7 +2,7 @@
 can join the order system with seller exports, reviews and events without copying data.
 
 Two ways to connect:
-  local    the Zetaris platform running in Docker (the hackathon bundle). Log in with the admin account
+  local    the Zetaris platform running in Docker (the self-hosted bundle). Log in with the admin account
            (ZETARIS_USER / ZETARIS_PASSWORD) at ZETARIS_URL (default http://localhost:3000), then
            POST /api/proxy/sql-editor/sqls/run-query {"sql", "limit"} -> {"headers": [...], "data": [[...]]}
   cloud    a Zetaris Cloud endpoint with an API key: POST {ZETARIS_REST_URL}/sql-editor/sqls/run

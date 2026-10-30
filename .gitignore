@@ -18,9 +18,11 @@ data/olist/generated/
 preview_runs/
 runs/*
 !runs/.gitkeep
-# two finished sample runs, so the app can replay them without keys
+# finished sample runs, so the app can replay them without keys
 !runs/20261028-004653-0e90/
 !runs/20261027-022755-6d02/
+# the same March 2018 question, re-run on NVIDIA Nemotron via Nebius Token Factory (30 Oct 2026)
+!runs/20261030-060526-66f1/
 *.duckdb
 *.duckdb.wal
 

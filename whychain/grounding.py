@@ -316,7 +316,7 @@ def check_numbers(text: str, evidence: list[dict], key_numbers=None, fetch=None,
             "key_numbers": {"verified": len(key_vals), "problems": key_problems}}
 
 
-# kept for callers of the first version
+# kept for older callers
 def check_claim(text: str, evidence: list[dict], key_numbers=None, fetch=None) -> dict:
     return check_numbers(text, evidence, key_numbers, fetch)
 

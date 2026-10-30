@@ -55,7 +55,8 @@ class Settings:
         f"host={env('POSTGRES_HOST', 'localhost')} port={env('POSTGRES_PORT', '5433')} "
         f"dbname={env('POSTGRES_DB', 'erp')} user={env('POSTGRES_USER', 'whychain')} "
         f"password={env('POSTGRES_PASSWORD', 'whychain-local')}"))
-    meterless_url: str = field(default_factory=lambda: env("METERLESS_BRIDGE_URL", "http://localhost:8787"))
+    # optional Meterless engines bridge (an external memory service); empty = WhyChain's own memory
+    meterless_url: str = field(default_factory=lambda: env("METERLESS_BRIDGE_URL"))
     # read documents only on this machine (Meterless Nightshift), for runs that don't say otherwise
     private_docs: bool = field(default_factory=lambda: env("WHYCHAIN_PRIVATE_DOCS", "false").lower() == "true")
     max_rounds: int = field(default_factory=lambda: int(env("WHYCHAIN_MAX_ROUNDS", "2")))
@@ -64,22 +65,30 @@ class Settings:
 
     def providers(self) -> dict[str, Provider]:
         return {
-            "xai": Provider("xai", env("XAI_BASE_URL", "https://api.x.ai/v1"), env("XAI_API_KEY"),
-                            env("XAI_MODEL", "grok-4-fast")),
-            # NIM for fast agent work (thinking off) ...
+            # ---- Nebius Token Factory: the default for every model call (NVIDIA Nemotron, OpenAI-compatible) ----
+            # Nemotron 3 Super, thinking off, for fast data and document work ...
+            "tf": Provider("tf", _tf_url(), env("NEBIUS_API_KEY"), env("TF_MODEL", TF_SUPER),
+                           thinking=env("TF_THINKING", "false").lower() == "true"),
+            # ... the same model with reasoning switched on for planning, judging and writing ...
+            "tf-reason": Provider("tf-reason", _tf_url(), env("NEBIUS_API_KEY"), env("TF_REASON_MODEL", TF_SUPER),
+                                  thinking=env("TF_REASON_THINKING", "true").lower() == "true"),
+            # ... and a DIFFERENT Nemotron model on Token Factory when the main one is overloaded or failing
+            "tf-backup": Provider("tf-backup", _tf_url(), env("NEBIUS_API_KEY"), env("TF_BACKUP_MODEL", TF_ULTRA),
+                                  thinking=False),
+            # ---- optional overrides, off unless their keys are set ----
+            # NVIDIA NIM: used only if NVIDIA_API_KEY is set, after Token Factory
             "nim": Provider("nim", env("NIM_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                             env("NVIDIA_API_KEY"), env("NIM_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b"),
                             thinking=env("NIM_THINKING", "false").lower() == "true"),
-            # ... and the same family with reasoning switched on for planning, judging and writing
             "nim-reason": Provider("nim-reason", env("NIM_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                                    env("NVIDIA_API_KEY"),
                                    env("NIM_REASON_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b"),
                                    thinking=env("NIM_REASON_THINKING", "true").lower() == "true"),
-            # a DIFFERENT model on the same NVIDIA endpoint: covers one model being overloaded (the usual NIM
-            # failure), not an outage of the whole endpoint
             "nim-backup": Provider("nim-backup", env("NIM_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                                    env("NVIDIA_API_KEY"), env("NIM_BACKUP_MODEL", "nvidia/nemotron-3-ultra-550b-a55b"),
                                    thinking=False),
+            "xai": Provider("xai", env("XAI_BASE_URL", "https://api.x.ai/v1"), env("XAI_API_KEY"),
+                            env("XAI_MODEL", "grok-4-fast")),
             "nightshift": Provider("nightshift", env("NIGHTSHIFT_BASE_URL"), env("NIGHTSHIFT_API_KEY"),
                                    env("NIGHTSHIFT_MODEL", "meterless/local")),
             # Meterless Nightshift as the gateway: the same Nemotron models, reached through Nightshift (a signed
@@ -93,6 +102,17 @@ class Settings:
             "ollama": Provider("ollama", env("OLLAMA_BASE_URL", "http://localhost:11434/v1"), "ollama",
                                env("OLLAMA_MODEL", "qwen3:8b")),
         }
+
+
+# Nebius Token Factory (https://tokenfactory.nebius.com): model ids exactly as Token Factory serves them
+TF_BASE_URL = "https://api.tokenfactory.us-central1.nebius.com/v1/"
+TF_SUPER = "nvidia/nemotron-3-super-120b-a12b"
+TF_ULTRA = "nvidia/Nemotron-3-Ultra-550b-a55b"
+TF_EMBED = "Qwen/Qwen3-Embedding-8B"   # Token Factory serves no Nemotron embedder
+
+
+def _tf_url() -> str:
+    return env("NEBIUS_BASE_URL", TF_BASE_URL)
 
 
 def _ns_primary() -> bool:

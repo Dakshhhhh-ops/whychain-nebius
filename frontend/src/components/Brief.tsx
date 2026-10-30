@@ -385,7 +385,7 @@ export function BriefView({ result, onOpen, onDecided }: { result: RunResult; on
         )}
         {(result.lessons ?? []).length > 0 && (
           <Card>
-            <CardHeader title="Lessons saved to memory" subtitle="Meterless H-MEM · used by future investigations" icon={<Lightbulb className="h-4 w-4" />} />
+            <CardHeader title="Lessons saved to memory" subtitle="WhyChain memory · used by future investigations" icon={<Lightbulb className="h-4 w-4" />} />
             <ul className="space-y-2 p-4">
               {(result.lessons ?? []).map((l, i) => (
                 <li key={i} className="flex gap-2 text-[13px] text-slate-700">

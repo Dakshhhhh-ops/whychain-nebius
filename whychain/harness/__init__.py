@@ -1,4 +1,4 @@
-"""Pick the data harness. Zetaris is primary. The local DuckDB harness is the offline fallback."""
+"""Pick the data harness. The local DuckDB harness is the default; Zetaris is an optional adapter (WHYCHAIN_HARNESS=zetaris)."""
 from __future__ import annotations
 
 from whychain.config import SETTINGS
@@ -28,6 +28,9 @@ def get_harness(prefer: str | None = None, allow_fallback: bool = True,
             raise RuntimeError(notes[-1])
     from whychain.harness.local import LocalHarness
 
-    h = LocalHarness(dataset)
+    # USE_POSTGRES=false: read the order system from its CSV export without trying Postgres (containers, demos)
+    from whychain.config import env
+
+    h = LocalHarness(dataset, use_postgres=env("USE_POSTGRES", "auto").lower() != "false")
     notes.append(f"Local DuckDB harness (ERP from {h.erp_mode}).")
     return h, notes

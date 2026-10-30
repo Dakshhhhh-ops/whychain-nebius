@@ -155,8 +155,8 @@ export function Investigation() {
             </Badge>
             <Badge tone={(result?.memory?.backend ?? state.memoryBackend) === "meterless" ? "green" : "slate"}>
               <Brain className="h-3 w-3" />
-              {(result?.memory?.backend ?? state.memoryBackend) === "meterless" ? "Meterless memory" : "Local memory"}
-              {(result?.memory?.embedder ?? state.memoryEmbedder)?.includes("nemotron") ? " · Nemotron embeddings" : ""}
+              {(result?.memory?.backend ?? state.memoryBackend) === "meterless" ? "Meterless memory" : "WhyChain memory"}
+              {(result?.memory?.embedder ?? state.memoryEmbedder)?.includes("nemotron") ? " · Nemotron embeddings" : (result?.memory?.embedder ?? state.memoryEmbedder)?.includes("Qwen") ? " · Qwen3 embeddings" : ""}
             </Badge>
             {state.privateDocs && (
               <span title="The written record was read on this machine by Meterless Nightshift; no document text was sent to the cloud">
@@ -195,7 +195,7 @@ export function Investigation() {
           <div className="mt-1 break-words font-mono text-[12px] text-rose-800">{failure.slice(0, 400)}</div>
           {/provider|model|api key|connection/i.test(failure) && (
             <div className="mt-2 text-[13px] text-rose-900">
-              No AI model could be reached. Add <span className="font-mono">NVIDIA_API_KEY</span> to the{" "}
+              No AI model could be reached. Add <span className="font-mono">NEBIUS_API_KEY</span> (Nebius Token Factory) to the{" "}
               <span className="font-mono">.env</span> file, restart the app, then run the investigation again.
             </div>
           )}
@@ -475,7 +475,7 @@ function MemoryTab({ result }: { result: RunResult }) {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader title="Recalled at the start" subtitle="Earlier conclusions from Meterless H-MEM, given to the Planner" icon={<Brain className="h-4 w-4" />} />
+        <CardHeader title="Recalled at the start" subtitle="Earlier conclusions from memory, given to the Planner" icon={<Brain className="h-4 w-4" />} />
         {(result.memories ?? []).length ? (
           <ul className="divide-y divide-slate-100">
             {(result.memories ?? []).map((m, i) => (
@@ -491,7 +491,7 @@ function MemoryTab({ result }: { result: RunResult }) {
         )}
       </Card>
       <Card>
-        <CardHeader title="Cause graph" subtitle="Relations written to the Meterless World Model" icon={<GitBranch className="h-4 w-4" />} />
+        <CardHeader title="Cause graph" subtitle="Relations the agents wrote for this run" icon={<GitBranch className="h-4 w-4" />} />
         {world === null ? (
           <div className="p-5">
             <Spinner />
@@ -508,8 +508,7 @@ function MemoryTab({ result }: { result: RunResult }) {
           </ul>
         ) : (
           <EmptyState title="No cause graph for this run here">
-            The connected Meterless World Model has no relations for this run. Runs from evaluation passes wrote theirs to a
-            separate, temporary memory; runs started in the app record them here.
+            This run wrote no cause relations (it ended before the Reporter, or it answered without a cause chain).
           </EmptyState>
         )}
       </Card>

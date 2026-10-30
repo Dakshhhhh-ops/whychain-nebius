@@ -1,4 +1,9 @@
-# Meterless bridge
+# Meterless bridge (optional adapter)
+
+> **Optional since the Nebius version (30 Oct 2026).** WhyChain now has its own memory, router and why-chain graph
+> (`whychain/memory.py`, `whychain/scout.py`) and does not need this service. It is used only when
+> `METERLESS_BRIDGE_URL` is set. With `NEBIUS_API_KEY` in WhyChain's `.env`, its embeddings use Qwen3-Embedding-8B on
+> Nebius Token Factory; with only `NVIDIA_API_KEY`, Nemotron Embed on NVIDIA NIM as before.
 
 A small local Node service that gives WhyChain's Python agents HTTP access to the **real Meterless engines**:
 
@@ -242,7 +247,7 @@ Latency, measured on this machine with data under OneDrive, after 1.8k world eve
 - **Some state is in memory only.** Dream proposals, and the engine's own sleep backups, live in memory and are lost on restart. The bridge's disk backups do survive.
 - **The H-MEM ledger `actor` is always `whychain-bridge`.** The engine fixes the actor per instance. The calling agent is recorded on each memory (`agent`) and shown in the audit entries.
 - **World Model fact winners are recomputed on read.** The reference `assertFact` writes the winning value onto the entity and sets `supersededBy` only in live memory, not on replay. The bridge therefore computes the current fact (most-recent-wins, the engine's default policy) from the fact log on every read, and `/world/state` stays identical across restarts (the smoke test checks this).
-- **Persistence is coalesced.** Both reference stores rewrite their whole JSON file on every mutation. The bridge wraps each engine's `persist()` so a request causes one write before the response is sent, and it retries transient Windows locks (`EBUSY`/`EPERM` from OneDrive or antivirus). The World Model spec itself recommends this (§3.4: debounce writes, retry transient errors). Without it, a world event took ~51 ms at 1.8k events. The World Model file still grows with every event (~1 KB each); fine for a hackathon. If OneDrive sync gets in the way, set `METERLESS_BRIDGE_DATA_DIR` to a folder outside OneDrive.
+- **Persistence is coalesced.** Both reference stores rewrite their whole JSON file on every mutation. The bridge wraps each engine's `persist()` so a request causes one write before the response is sent, and it retries transient Windows locks (`EBUSY`/`EPERM` from OneDrive or antivirus). The World Model spec itself recommends this (§3.4: debounce writes, retry transient errors). Without it, a world event took ~51 ms at 1.8k events. The World Model file still grows with every event (~1 KB each); fine for a demo. If OneDrive sync gets in the way, set `METERLESS_BRIDGE_DATA_DIR` to a folder outside OneDrive.
 - **Run a single bridge process.** Two processes on the same data dir would overwrite each other.
 - **Port 8787 is also on Nightshift's Auto Detect list** (8088, 8090, 8787, 11434). The runtime defaults to 8088, so there is no clash. If Nightshift is ever set to 8787, change `METERLESS_BRIDGE_PORT`.
 - **The other engines are not wired in.** Markovian and Scout Intent are also in the Meterless repo. Scout Intent is spec-only, with no runnable reference.

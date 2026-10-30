@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import time
 
-import httpx
 import psycopg
 
 from whychain.config import SETTINGS
@@ -52,20 +51,24 @@ def main() -> None:
     else:
         line(None, "Zetaris", "neither ZETARIS_USER nor ZETARIS_API_KEY set (local DuckDB harness will be used)")
     # memory
-    try:
-        h = httpx.get(f"{SETTINGS.meterless_url}/health", timeout=3).json()
-        line(bool(h.get("ok")), "Meterless bridge", f"engines {h.get('engines')} · {h.get('memory', {}).get('records')} memories")
-        emb = h.get("embeddings") or {}
-        line(bool(emb.get("active")) if emb else None, "  H-MEM embeddings",
-             (f"{emb.get('embedder')} · {emb.get('failures', 0)} failed calls"
-              + (f" (last: {emb.get('last_error')})" if emb.get("last_error") else "")) if emb
-             else "not reported (bridge predates Nemotron embeddings: restart it)")
-    except Exception:
-        line(False, "Meterless bridge", f"not reachable at {SETTINGS.meterless_url} (cd meterless_bridge && npm start)")
+    from whychain.memory import Memory
+
+    m = Memory()
+    st = m.status()
+    if m.online:
+        line(True, "memory", f"Meterless bridge at {SETTINGS.meterless_url} (optional adapter) · {st.get('embedder')}")
+    else:
+        if SETTINGS.meterless_url:
+            line(None, "Meterless bridge", f"not reachable at {SETTINGS.meterless_url}; WhyChain's own memory is used")
+        n = m.list(100000).get("count", 0)
+        on = bool(m._emb and m._emb.active)
+        sem = m._emb.embed(["probe"]) if on else None
+        line(bool(sem) if on else None, "memory", f"WhyChain memory ({n} items) · recall: {st.get('embedder')}"
+             + ("" if sem or not on else f" · embedding failed: {m._emb.last_error}"))
     # models
     llm = LLM()
     if not any(p.configured for p in llm.providers.values()):
-        line(False, "models", "no model provider configured: set NVIDIA_API_KEY in .env (without one, late-delivery and "
+        line(False, "models", "no model provider configured: set NEBIUS_API_KEY (Nebius Token Factory) in .env (without one, late-delivery and "
              "supply briefs are written by code only, and open-ended questions can't run)")
     for name, p in llm.providers.items():
         if not p.configured:

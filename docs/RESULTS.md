@@ -2,6 +2,80 @@
 
 How the results are scored: a case passes "root cause found" when the expected terms appear, as whole words, in a cause the Evaluator confirmed or in the headline. Keyword scoring is crude; read the briefs too. Regenerate with `python -m evals.run_evals` (or `--dataset olist|kaveri`).
 
+## On NVIDIA Nemotron via Nebius Token Factory (the current version, 30 Oct 2026)
+
+Every model call on Token Factory (Nemotron 3 Super; Nemotron 3 Ultra as backup), data through the local DuckDB harness (the order system read from its CSV export), WhyChain's own memory with Qwen3-Embedding-8B recall. Code: the `nebius-nemotron` branch, uncommitted at the time of the runs.
+
+### End to end: the March 2018 question, against the recorded NIM run
+
+| | NIM version (`20261028-004653-0e90`, 28 Oct, through Zetaris) | Token Factory (`20261030-060526-66f1`, 30 Oct, local DuckDB) |
+|---|---|---|
+| Headline | 1,328 of 7,003 delivered orders placed March 2018 were late (19.0%), against 5.6% for a normal baseline. Main causes: carrier transit got slower (72.7% of the rise) and promised delivery windows got shorter (26.7% of the rise). | identical |
+| Verdicts (14 tests) | transit and promises confirmed causes; hand-over, volume, data artefact, Carnival, Rio storm, Correios strike rejected | identical, test by test, with identical shares |
+| Model calls | 8, all `nim` (Nemotron 3.5 Super VL), 36,845 tokens | 5, all `tf` (Nemotron 3 Super), 15,191 tokens, no fallbacks (the NIM run reused a cached data map; this one ran the Data Scout) |
+| Time | full brief at 70 s | full brief at 121 s, memory written at 286 s (see below) |
+
+The time difference is not the models: this run started cold (the Data Scout mapped the sources, 29 s for one 1,161-token call; the NIM run had the map cached), ran while the test suite used the same CPU, and spent 164 s writing memory because each memory was embedded in its own call (1 to 12 s each on Token Factory). Memory writes are now batched into one embedding call per run.
+
+### Probe used to choose the models (30 Oct)
+
+A document-reading task modelled on the Document Analyst: four dated documents, three candidate causes for the March 2018 rise, JSON out, scored out of 4 (support both real causes, rule out the strike, don't support it). Three calls per setting.
+
+| Model on Token Factory | Reasoning | Median latency | Scores |
+|---|---|---|---|
+| `nvidia/nemotron-3-super-120b-a12b` | off | 1.1 s | 3, 3, 3 |
+| `nvidia/Nemotron-3_5-Lightning` | off | 1.2 s | 3, 3, 3 |
+| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | off | 1.3 s | 3, 3, 3 |
+| `nvidia/Nemotron-3-Ultra-550b-a55b` | off | 0.9 s | 3, 3, 3 |
+| `nvidia/nemotron-3-super-120b-a12b` | on | 4.3 s | 4, 4, 4 |
+
+### All 18 eval questions on Token Factory (30 Oct 2026, 06:15 to 06:37 IST)
+
+**Results: root cause found in 18/18; red herring avoided in 15/15 cases that define one; right action in 8/8 cases that have one; held-out questions 4/4 (H1, HO1, KH1, KH4).** The same score as the NIM version's final pass (23 Oct), and every headline's first sentence is identical to that pass, question by question. 105 model calls in all (4 to 8 per question), 392,006 tokens (median about 22,000 per question); 104 calls went to Nemotron 3 Super and one fell back to Nemotron 3 Ultra.
+
+| Case | Held out | Root cause found | Red herring avoided | Right action | Model calls | Tokens | Time | Headline (first sentence) | Run |
+|---|---|---|---|---|---|---|---|---|---|
+| A-pune-at-risk |  | ✅ 2/2 | ✅ | ✅ | 8 | 42,135 | 138 s | 23 of the 29 open orders at the Pune DC due in the coming week have a line on backorder (79.3%). | `20261030-061501-d458` |
+| B-nashik-late |  | ✅ 2/2 | ✅ | ✅ | 6 | 22,126 | 56 s | 64 of 70 delivered orders to Nashik placed since September 2026 were late (91.4%), against 15.1% for a normal baseline. | `20261030-061719-23a5` |
+| C-mumbai-earbuds |  | ✅ 2/2 | ✅ | ✅ | 6 | 22,969 | 38 s | 33 of the 101 orders for earbuds placed at the Mumbai DC in mid October 2026 have a line on backorder (32.7%). | `20261030-061815-c602` |
+| D-chennai-backlog |  | ✅ 1/1 | ✅ | ✅ | 5 | 23,027 | 65 s | 47 of the 81 open orders created at the Chennai DC this week have a line on backorder (58.0%). | `20261030-061852-9923` |
+| E-ontime-drop |  | ✅ 3/3 | ✅ | ✅ | 5 | 17,765 | 42 s | 232 of 1,206 delivered orders placed September to October 2026 were late (19.2%), against 7.7% for the period you named. | `20261030-061957-386e` |
+| KH1-chennai-powerbanks | yes | ✅ 2/2 | ✅ | ✅ | 6 | 25,465 | 67 s | 31 of the 89 orders for power banks placed at the Chennai DC in the last 14 days have a line on backorder (34.8%). | `20261030-062039-7b48` |
+| KH2-hyderabad-september |  | ✅ 2/2 | ✅ | ✅ | 6 | 22,372 | 61 s | 17 of 98 delivered orders to Hyderabad placed September 2026 were late (17.3%), against 3.3% for a normal baseline. | `20261030-062146-6115` |
+| KH3-pune-october-false-premise |  | ✅ 1/1 | — | — | 6 | 23,469 | 48 s | It did not rise: 2 of 45 delivered orders to Pune placed October 2026 were late (4.4%), against 12.6% for a normal baseline. | `20261030-062246-267b` |
+| KH4-surat-september | yes | ✅ 3/3 | ✅ | ✅ | 6 | 21,256 | 57 s | 19 of 87 delivered orders to Surat placed September 2026 were late (21.8%), against 6.7% for a normal baseline. | `20261030-062335-12f6` |
+| KH5-mumbai-chargers-false-premise |  | ✅ 1/1 | — | — | 6 | 22,044 | 81 s | There is no shortage to explain: 0 of the 59 orders for chargers placed at the Mumbai DC in the last 14 days have a line on backorder (0.0%). | `20261030-062431-22b7` |
+| O1-march-2018 |  | ✅ 2/2 | ✅ | — | 6 | 28,814 | 81 s | 1,328 of 7,003 delivered orders placed March 2018 were late (19.0%), against 5.6% for a normal baseline. | `20261030-062600-52bf` |
+| O2-black-friday-2017 |  | ✅ 2/2 | ✅ | — | 6 | 18,848 | 56 s | Yes: Black Friday 2017 delayed deliveries. | `20261030-062713-e94f` |
+| O3-truckers-strike-2018 |  | ✅ 2/2 | ✅ | — | 4 | 11,152 | 67 s | Yes: Truckers' strike delayed deliveries. | `20261030-062809-ec89` |
+| H1-carnival-2018 | yes | ✅ 1/1 | ✅ | — | 5 | 13,318 | 91 s | No: Carnival holiday 2018 did not cause the delays. | `20261030-062916-7817` |
+| H2-northeast-delays |  | ✅ 2/2 | ✅ | — | 5 | 19,920 | 119 s | 1,150 of 9,044 delivered orders to Northeast were late (12.7%), against 6.2% for all other orders in the same period. | `20261030-063048-e86c` |
+| H3-rio-security |  | ✅ 2/2 | — | — | 6 | 18,877 | 77 s | The data can't test record cargo theft in Rio de Janeiro state (2017) directly: it is a long-running condition, not a dated event. | `20261030-063247-6a3e` |
+| HO1-february-2018 | yes | ✅ 2/2 | ✅ | — | 8 | 25,636 | 68 s | 926 of 6,555 delivered orders placed February 2018 were late (14.1%), against 5.1% for a normal baseline. | `20261030-063404-56f2` |
+| HO2-december-2017 |  | ✅ 1/1 | ✅ | — | 5 | 12,813 | 120 s | 411 of 5,513 delivered orders placed December 2017 were late (7.5%), against 3.5% for a normal baseline. | `20261030-063513-175c` |
+
+- **Setup.** Local DuckDB harness with the order systems read from their CSV exports (the NIM pass went through Zetaris), WhyChain's own memory with Qwen3 recall, every question once, one at a time, in one process. Memory was not emptied first: it held the March 2018 run above, so O1 could recall it (as a hint; the computed findings don't depend on it).
+- **One fallback.** Case A's Data Scout call (a 2,000 to 3,000-token data map) hit the client's 60 s timeout on Nemotron 3 Super and Nemotron 3 Ultra took over; Ultra's answer was cut at the 3,000-token limit, so a JSON repair retry went back to Super (17 s). The Token Factory timeout is now 120 s.
+- **Time.** 38 to 138 s per question (median 67 s), including the analysis tables' first load per dataset and, before a fix made after this pass, 15 s per run spent trying to reach a Postgres that wasn't running and up to 14 s embedding recall queries. Model calls: median 1.7 s, 90th percentile 4.0 s.
+- **Scoring is the same keyword scoring as before** (see the top of this file); all ground truth was written by the author, so these are development checks, not independent validation.
+
+### After the latency fixes: three questions again (30 Oct, 06:44 to 06:47 IST)
+
+After the pass above, three fixes: the Token Factory client timeout went from 60 to 120 s, `USE_POSTGRES=false` skips the 15 s attempt to reach a Postgres that isn't running, and recall no longer embeds the data-map lookup (and gives a recall query 10 s before falling back to keywords). The same scores, and the same headlines:
+
+| Case | Result | Model calls | Tokens | Recall done | Preliminary answer | Full brief | Before the fixes | Run |
+|---|---|---|---|---|---|---|---|---|
+| A Pune orders at risk | ✅ 2/2, red herring avoided, right action | 8, all Nemotron 3 Super (no fallback) | 41,242 | 8 s | 25 s | 45 s | 138 s, one fallback | `20261030-064427-b8cc` |
+| O1 March 2018 spike | ✅ 2/2, red herring avoided | 6, all Nemotron 3 Super | 21,579 | 10 s | 22 s (first Olist question: tables loaded) | 35 s | 81 s | `20261030-064525-a795` |
+| O2 Black Friday 2017 | ✅ 2/2, red herring avoided | 5, all Nemotron 3 Super | 15,531 | 5 s | 9 s | 19 s | 56 s | `20261030-064605-0e97` |
+
+The Docker image, run live with a key on this laptop (cold container, so the first question loaded the analysis tables): the March 2018 question gave the same headline, 6 calls to Nemotron 3 Super, 23,369 tokens, preliminary answer at 48 s and the run finished at 62 s.
+
+
+## Earlier measurements (NVIDIA NIM, 22–23 Oct 2026)
+
+Everything below was measured on an earlier build, before the move to Nebius, and has not been re-run on Token Factory unless the section above says so.
+
 ### Final pass: all 18 questions at one commit, through Zetaris (23 Oct 23:04 to 23:27 IST, commit `96815d9`)
 
 **Results: root cause found in 18/18; red herring avoided in 15/15 cases that define one; right action in 8/8 cases that have one; held-out questions 4/4 (H1, HO1, KH1, KH4). Preliminary answer: median 3.5 s after the start (1 to 42 s). Meterless Scout routed 17 of 18 questions itself and left 1 to the word rules; its route equalled the rules' every time.**

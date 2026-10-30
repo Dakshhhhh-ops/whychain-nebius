@@ -189,7 +189,7 @@ def test_scout_routes_when_confident_and_the_rules_decide_otherwise():
     assert choose(d("delivery.explain", "medium"), "battery") == ("battery", "scout")
     assert choose(d("delivery.explain", "low"), "agent")[0] == "agent"                     # not confident: rules
     assert choose(d("open.investigate", "high", clar={"reasons": ["x"]}), "battery")[0] == "battery"
-    assert choose(None, "supply") == ("supply", "rules (Scout unavailable)")
+    assert choose(None, "supply") == ("supply", "rules")
     assert choose(d("GENERAL", "reject", risk="block"), "battery") == ("refuse", "scout")
 
 

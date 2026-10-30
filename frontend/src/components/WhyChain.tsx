@@ -11,9 +11,9 @@ type Chain = {
   ruled: string[];
 };
 
-/** The chain as the Meterless World Model holds it for this run (relations written by the Reporter). */
+/** The chain as this run's graph holds it (relations written by the Reporter, folded from the run's trace). */
 function fromWorld(rels: Rel[]): Chain | null {
-  // the World Model keeps one relation per cause and symptom, with its own attributes (confidence = the share)
+  // the graph keeps one relation per cause and symptom, with its own attributes (confidence = the share)
   const causeRels = rels.filter((r) => r.type === "causes");
   const ruledRels = rels.filter((r) => r.type === "ruled_out_for");
   if (!causeRels.length && !ruledRels.length) return null;
@@ -40,7 +40,7 @@ function fromWorld(rels: Rel[]): Chain | null {
   };
 }
 
-/** The same chain from this run's own verdicts, when the World Model that holds the run isn't connected. */
+/** The same chain from this run's own verdicts, when the run's graph has no relations. */
 function fromResult(result: RunResult): Chain {
   const v = result.verdicts ?? {};
   const fs = result.findings ?? [];
@@ -103,7 +103,7 @@ export function WhyChain({ result }: { result: RunResult }) {
           Why: the chain
         </div>
         <div className="text-[11px] text-slate-400">
-          {world ? "From the Meterless World Model" : "From this run's verdicts (the World Model holding this run isn't connected)"}
+          {world ? "From this run's cause graph" : "From this run's verdicts"}
         </div>
       </div>
       <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-start">

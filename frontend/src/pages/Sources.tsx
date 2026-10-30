@@ -45,9 +45,9 @@ export function Sources() {
         title="Data sources"
         subtitle="Separate systems, queried in place as one. Agents write one SQL query that joins the live database with file exports, feeds and documents; no data is copied."
         right={
-          <Badge tone={zetaris ? "brand" : "amber"} className="px-2.5 py-1 text-[12px]">
+          <Badge tone="brand" className="px-2.5 py-1 text-[12px]">
             <GitMerge className="h-3.5 w-3.5" />
-            {zetaris ? "Federated by Zetaris" : "Local fallback harness"}
+            {zetaris ? "Federated by Zetaris" : "Federated by DuckDB"}
           </Badge>
         }
       />

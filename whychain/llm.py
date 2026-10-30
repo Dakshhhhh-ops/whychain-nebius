@@ -1,10 +1,12 @@
 """Model access. Every provider speaks the OpenAI API, so one client covers all of them.
 
-Each agent asks for a *role*, not a model:
-  reason  -> planner, evaluator, risk, reporter   (xAI Grok, then NVIDIA NIM, then local)
-  work    -> data investigators, scout           (NVIDIA NIM, then Grok, then local)
-  local   -> document analyst                    (NVIDIA NIM, then Meterless Nightshift on this machine, then Ollama)
-  private -> document analyst in private mode    (Meterless Nightshift only: documents never leave the machine)
+Each agent asks for a *role*, not a model. Every role runs on NVIDIA Nemotron served by Nebius Token Factory:
+  reason  -> planner, evaluator, risk, reporter   (Nemotron 3 Super, reasoning on; Nemotron 3 Ultra as backup)
+  work    -> data investigators, scout           (Nemotron 3 Super, reasoning off; Nemotron 3 Ultra as backup)
+  local   -> document analyst                    (Nemotron 3 Super, reasoning off; Nemotron 3 Ultra as backup)
+  private -> document analyst in private mode    (an on-device model only: documents never leave the machine)
+Optional overrides, used only when their keys are set and always after Token Factory: NVIDIA NIM, xAI, Ollama, and
+Meterless Nightshift (a local gateway).
 
 If a provider fails, the call falls through to the next one, and the trace records it.
 """
@@ -24,13 +26,15 @@ from whychain.slots import slot
 
 ROLE_CHAINS = {
     # ns-* (Nightshift as the gateway to the same Nemotron models) exist only with NIGHTSHIFT_PRIMARY=true
-    "reason": ["ns-reason", "xai", "nim-reason", "nim-backup", "nim", "nightshift", "ollama"],
-    "work": ["ns-work", "nim", "nim-backup", "xai", "nim-reason", "nightshift", "ollama"],
-    "local": ["ns-work", "nim", "nim-backup", "nightshift", "ollama", "xai"],
+    "reason": ["ns-reason", "tf-reason", "tf-backup", "tf", "nim-reason", "nim-backup", "nim", "xai", "nightshift",
+               "ollama"],
+    "work": ["ns-work", "tf", "tf-backup", "tf-reason", "nim", "nim-backup", "nim-reason", "xai", "nightshift", "ollama"],
+    "local": ["ns-work", "tf", "tf-backup", "nim", "nim-backup", "nightshift", "ollama", "xai"],
     # private documents: read only on this machine. No cloud fallback; if Nightshift fails, the record goes unread.
     "private": ["nightshift"],
 }
-JSON_MODE_OK = {"xai", "ollama", "nightshift", "nim", "nim-reason", "nim-backup", "ns-work", "ns-reason"}
+JSON_MODE_OK = {"xai", "ollama", "nightshift", "nim", "nim-reason", "nim-backup", "ns-work", "ns-reason",
+                "tf", "tf-reason", "tf-backup"}
 NIGHTSHIFT = {"nightshift", "ns-work", "ns-reason"}  # calls that go through Meterless Nightshift
 TRANSIENT = (InternalServerError, RateLimitError, APITimeoutError, APIConnectionError)
 ATTEMPTS = 4  # per provider, for transient errors, before falling back to the next provider
@@ -98,8 +102,9 @@ class LLM:
     def _client(self, p: Provider) -> OpenAI:
         if p.name not in self._clients:
             # JSON replies are short, so a slow call is almost always stuck in a queue: give up early and retry
-            slow = ("ollama", "nightshift", "nim-reason", "ns-work", "ns-reason")
-            timeout = 240.0 if p.name in slow else 60.0
+            slow = ("ollama", "nightshift", "nim-reason", "tf-reason", "ns-work", "ns-reason")
+            # Token Factory: the Data Scout's map runs to 2-3k tokens, which measured 17 to 60 s on Nemotron 3 Super
+            timeout = 240.0 if p.name in slow else 120.0 if p.name in ("tf", "tf-backup") else 60.0
             headers = {"meterless-app": "whychain", "meterless-scope": "user"} if p.name in NIGHTSHIFT else None
             self._clients[p.name] = OpenAI(base_url=p.base_url, api_key=p.api_key or "none", timeout=timeout,
                                            max_retries=0, default_headers=headers)
@@ -128,7 +133,7 @@ class LLM:
                 raise LLMError("Private documents is on, but Meterless Nightshift is not configured "
                                "(NIGHTSHIFT_BASE_URL); the written record was not read")
             if soonest is None:
-                raise LLMError("No model provider is configured. Set XAI_API_KEY / NVIDIA_API_KEY or run Ollama.")
+                raise LLMError("No model provider is configured. Set NEBIUS_API_KEY (Nebius Token Factory) in .env.")
             time.sleep(max(0.0, min(soonest - time.monotonic(), 60.0)))
             chain = self._chain(role) or [p for n in self.chains.get(role, []) if (p := self.providers.get(n))
                                           and p.configured][:1]
@@ -199,7 +204,7 @@ class LLM:
             except TimeoutError as e:  # waited too long for a free slot
                 raise APITimeoutError(request=None) from e  # type: ignore[arg-type]
             except RateLimitError as e:
-                # with another model behind this one, switch after one short retry: NIM limits each model separately
+                # with another model behind this one, switch after one short retry: limits are per model
                 if attempt >= limit or (attempts <= 2 and attempt >= 2):
                     raise
                 wait = min(_retry_after(e) or (5.0 if attempts <= 2 else 10.0 * attempt), 60.0,

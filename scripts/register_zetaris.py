@@ -10,7 +10,7 @@ Before running:
   2. WhyChain's Postgres (docker-compose.yml here) is up and loaded (python -m datagen.olist / datagen.load_postgres).
   3. WhyChain's data folders are mounted into the Zetaris containers under ZETARIS_DATA_ROOT
      (default /home/zetaris/customer-data/shared/whychain): the bundle only reads local files under
-     /home/zetaris/customer-data/shared. See docs/zetaris-override.yml for the compose override.
+     /home/zetaris/customer-data/shared. See scripts/zetaris-override.yml for the compose override.
 
 Both datasets go into one Zetaris instance; the simulated company's sources get a "kaveri_" prefix (the harness maps
 the names back), because both datasets have sources called signals and docs.

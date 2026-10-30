@@ -127,13 +127,15 @@ def test_nightshift_gateway_goes_first_only_when_switched_on(monkeypatch):
 
     monkeypatch.setenv("NIGHTSHIFT_BASE_URL", "http://127.0.0.1:8088/v1")
     monkeypatch.setenv("NIGHTSHIFT_API_KEY", "token")
+    monkeypatch.setenv("NEBIUS_API_KEY", "tf-test")
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
     monkeypatch.setenv("NIGHTSHIFT_PRIMARY", "false")
     off = LLM(providers=SETTINGS.providers())
-    assert [p.name for p in off._chain("work")][0] == "nim"
+    assert [p.name for p in off._chain("work")][:2] == ["tf", "tf-backup"]      # Token Factory first
+    assert "nim" in [p.name for p in off._chain("work")]                        # NIM only behind it, when its key is set
     monkeypatch.setenv("NIGHTSHIFT_PRIMARY", "true")
     on = LLM(providers=SETTINGS.providers())
-    assert [p.name for p in on._chain("work")][:2] == ["ns-work", "nim"]       # direct NVIDIA stays the fallback
+    assert [p.name for p in on._chain("work")][:2] == ["ns-work", "tf"]        # direct Token Factory stays the fallback
     assert [p.name for p in on._chain("reason")][0] == "ns-reason"
     on.private_docs = True
     assert [p.name for p in on._chain("private")] == ["nightshift"]            # private documents stay on the machine

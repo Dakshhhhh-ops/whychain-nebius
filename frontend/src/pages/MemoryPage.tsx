@@ -36,7 +36,7 @@ export function MemoryPage() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <PageHeader
         title="Memory"
-        subtitle="What WhyChain has learned across investigations: confirmed causes, ruled-out explanations, lessons and manager decisions. Stored in Meterless H-MEM with provenance, and recalled by later investigations."
+        subtitle="What WhyChain has learned across investigations: confirmed causes, ruled-out explanations, lessons and manager decisions. Stored with provenance, and recalled by meaning (Qwen3 embeddings on Nebius Token Factory) by later investigations."
       />
       {!data ? (
         <div className="flex justify-center p-10">
@@ -46,14 +46,14 @@ export function MemoryPage() {
         <>
           <Card className="mt-6">
             <div className="grid grid-cols-2 gap-5 px-5 py-4 sm:grid-cols-5">
-              <Stat label="Memories" value={data.count} hint={data.status.online ? "Meterless H-MEM" : "local file (bridge offline)"} />
+              <Stat label="Memories" value={data.count} hint={data.status.backend === "meterless" ? "Meterless H-MEM" : "WhyChain memory"} />
               <Stat label="Long-term" value={tiers.long_term ?? "—"} hint="promoted by consolidation" />
               <Stat label="Working" value={tiers.working ?? "—"} hint="recent findings" />
               <Stat label="Short-term" value={tiers.short_term ?? "—"} hint="unconfirmed hypotheses" />
               <Stat
                 label="Recall embeddings"
-                value={!data.status.online ? "—" : data.status.embedder?.includes("nemotron") ? "Nemotron" : "Mock"}
-                hint={data.status.embedder ?? "not reported by the bridge"}
+                value={data.status.embedder?.includes("Qwen") ? "Qwen3 · Token Factory" : data.status.embedder?.includes("nemotron") ? "Nemotron" : data.status.backend === "meterless" ? "Mock" : "Keywords"}
+                hint={data.status.embedder ?? "not reported"}
               />
             </div>
           </Card>

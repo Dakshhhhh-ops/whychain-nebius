@@ -1,13 +1,16 @@
-// NVIDIA Nemotron embeddings for H-MEM.
+// Cloud embeddings for H-MEM (optional Meterless adapter; WhyChain's default memory lives in whychain/memory.py).
 //
-// H-MEM calls embed(text) synchronously, so the bridge fetches each text's embedding from NVIDIA NIM before handing
+// With NEBIUS_API_KEY: Qwen3-Embedding-8B on Nebius Token Factory (Token Factory serves no Nemotron embedder), queries
+// prefixed with Qwen's retrieval instruction. With only NVIDIA_API_KEY: NVIDIA Nemotron embeddings on NIM, as before.
+//
+// H-MEM calls embed(text) synchronously, so the bridge fetches each text's embedding from the cloud before handing
 // the text to the engine, and registers a lookup (setEmbeddingProvider) that returns the fetched vector. Memories
 // are embedded as "passage", recall queries as "query" (the model is asymmetric). If NVIDIA is unreachable, or no
 // key is set, the engine's own deterministic mock embedder is used for everything.
 //
-//   METERLESS_EMBEDDER   nvidia (default when NVIDIA_API_KEY is set) | mock
-//   METERLESS_EMBED_MODEL  default nvidia/nemotron-3-embed-1b
-//   NVIDIA_API_KEY       read from the environment, or from WhyChain's .env next to this folder (never logged)
+//   METERLESS_EMBEDDER   nvidia (default: the cloud embedder when a key is set) | mock
+//   METERLESS_EMBED_MODEL  default Qwen/Qwen3-Embedding-8B on Token Factory, nvidia/nemotron-3-embed-1b on NIM
+//   NEBIUS_API_KEY / NVIDIA_API_KEY  read from the environment, or from WhyChain's .env next to this folder (never logged)
 
 import fs from "node:fs";
 import path from "node:path";
@@ -16,10 +19,10 @@ import { mockEmbed, setEmbeddingProvider } from "./engines/hmem/reference/src/em
 
 type Kind = "query" | "passage";
 
-function keyFromDotenv(dir: string): string | undefined {
+function keyFromDotenv(dir: string, name: string): string | undefined {
   try {
     const text = fs.readFileSync(path.join(dir, "..", ".env"), "utf-8");
-    const m = text.match(/^NVIDIA_API_KEY=(.*)$/m);
+    const m = text.match(new RegExp(`^${name}=(.*)$`, "m"));
     const v = m?.[1]?.trim().replace(/^["']|["']$/g, "");
     return v && !v.includes("your-") ? v : undefined;
   } catch {
@@ -31,6 +34,7 @@ export class NemotronEmbedder {
   readonly model: string;
   readonly url: string;
   private key: string | undefined;
+  private nebius: boolean;
   private cache = new Map<string, number[]>();
   private mode: Kind = "passage";
   active: boolean;
@@ -40,9 +44,12 @@ export class NemotronEmbedder {
   dim: number | null = null;
 
   constructor(dir: string) {
-    this.key = process.env.NVIDIA_API_KEY || keyFromDotenv(dir);
-    this.model = process.env.METERLESS_EMBED_MODEL ?? "nvidia/nemotron-3-embed-1b";
-    this.url = (process.env.NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "") + "/embeddings";
+    const nebius = process.env.NEBIUS_API_KEY || keyFromDotenv(dir, "NEBIUS_API_KEY");
+    this.nebius = !!nebius;
+    this.key = nebius || process.env.NVIDIA_API_KEY || keyFromDotenv(dir, "NVIDIA_API_KEY");
+    this.model = process.env.METERLESS_EMBED_MODEL ?? (nebius ? "Qwen/Qwen3-Embedding-8B" : "nvidia/nemotron-3-embed-1b");
+    this.url = (nebius ? process.env.NEBIUS_BASE_URL ?? "https://api.tokenfactory.us-central1.nebius.com/v1"
+                       : process.env.NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "") + "/embeddings";
     const choice = (process.env.METERLESS_EMBEDDER ?? "nvidia").toLowerCase();
     this.active = choice === "nvidia" && !!this.key;
     if (this.active) setEmbeddingProvider((text) => this.cache.get(`${this.mode}\u0000${text}`));
@@ -64,7 +71,12 @@ export class NemotronEmbedder {
         const r = await fetch(this.url, {
           method: "POST",
           headers: { authorization: `Bearer ${this.key}`, "content-type": "application/json" },
-          body: JSON.stringify({ input: batch, model: this.model, input_type: kind, encoding_format: "float", truncate: "END" }),
+          body: JSON.stringify(this.nebius
+            // Qwen3 embeddings are instruction-aware: queries carry the retrieval task, passages are embedded as-is
+            ? { input: batch.map((t) => (kind === "query" ? `Instruct: Given a question, retrieve the memory that answers it
+Query: ${t}` : t)),
+                model: this.model, dimensions: 1024 }
+            : { input: batch, model: this.model, input_type: kind, encoding_format: "float", truncate: "END" }),
           signal: AbortSignal.timeout(30_000),
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);

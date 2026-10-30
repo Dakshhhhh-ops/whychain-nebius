@@ -1,44 +1,50 @@
 #!/usr/bin/env bash
-# Starts WhyChain on macOS or Linux: the Zetaris platform (if ZETARIS_DIR is set in .env), the ERP database, the
-# Meterless memory service and the web app, then warms them up. The same steps as start.cmd on Windows.
-# Run from the project folder after the setup in the README:  ./start.sh   (Ctrl+C stops the bridge and the app)
+# Starts WhyChain on macOS or Linux, then warms it up. The same steps as start.cmd on Windows.
+# Run from the project folder after the setup in the README:  ./start.sh   (Ctrl+C stops it)
+#
+# The default needs nothing but Python and NEBIUS_API_KEY in .env: every model call goes to NVIDIA Nemotron on
+# Nebius Token Factory, data is queried in place with DuckDB, and memory lives in runs/. Optional extras start only
+# when .env asks for them: the ERP database in Docker (USE_POSTGRES=true), the Zetaris platform (ZETARIS_DIR) and
+# the Meterless engines bridge (METERLESS_BRIDGE_URL).
 set -euo pipefail
 cd "$(dirname "$0")"
 
 PY=.venv/bin/python
 [ -x "$PY" ] || { echo "No .venv found: run the Quick start in the README first."; exit 1; }
 
-ZETARIS_DIR=$(grep -E '^ZETARIS_DIR=' .env 2>/dev/null | head -1 | cut -d= -f2- || true)
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  if [ -n "${ZETARIS_DIR:-}" ] && [ -d "$ZETARIS_DIR" ]; then
-    echo "Starting Zetaris from $ZETARIS_DIR ..."
-    (cd "$ZETARIS_DIR" && docker compose up -d)
+envval() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*$//' || true; }
+
+if [ "$(envval USE_POSTGRES)" = "true" ] || [ -n "$(envval ZETARIS_DIR)" ]; then
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    ZETARIS_DIR=$(envval ZETARIS_DIR)
+    if [ -n "$ZETARIS_DIR" ] && [ -d "$ZETARIS_DIR" ]; then
+      echo "Starting Zetaris from $ZETARIS_DIR ..."
+      (cd "$ZETARIS_DIR" && docker compose up -d)
+    fi
+    if [ "$(envval USE_POSTGRES)" = "true" ]; then
+      echo "Starting the ERP database..."
+      docker compose up -d
+    fi
   else
-    echo "ZETARIS_DIR is not set in .env: Zetaris not started (WhyChain uses its local harness)."
+    echo "Docker is not running: the order system is read from its CSV copy."
   fi
-  echo "Starting the ERP database..."
-  docker compose up -d
-else
-  echo "Docker is not running: the order system is read from its CSV copy and queries use the local harness."
 fi
 
 pids=()
 cleanup() { kill "${pids[@]}" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
-if [ -d meterless_bridge/node_modules ]; then
-  echo "Starting the Meterless memory service..."
+if [ -n "$(envval METERLESS_BRIDGE_URL)" ] && [ -d meterless_bridge/node_modules ]; then
+  echo "Starting the optional Meterless engines bridge..."
   (cd meterless_bridge && npm start >../meterless_bridge.log 2>&1) &
   pids+=($!)
-else
-  echo "meterless_bridge/node_modules is missing (cd meterless_bridge && npm ci): memory falls back to a local file."
 fi
 
 echo "Starting the web app..."
 "$PY" -m whychain.api >whychain_api.log 2>&1 &
 pids+=($!)
 
-echo "Warming up (a cold Zetaris takes a few minutes)..."
+echo "Warming up..."
 "$PY" scripts/warmup.py || true
-echo "WhyChain is running at http://localhost:8000  (logs: whychain_api.log, meterless_bridge.log; Ctrl+C to stop)"
+echo "WhyChain is running at http://localhost:8000  (log: whychain_api.log; Ctrl+C to stop)"
 wait

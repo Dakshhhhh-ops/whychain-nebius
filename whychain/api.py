@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import hmac
 import io
 import json
 import os
@@ -18,7 +19,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -143,6 +144,7 @@ def status(dataset: str | None = None) -> dict:
          "models": {k: {"configured": p.configured, "model": p.model} for k, p in llm.providers.items()},
          # Ollama alone doesn't count: on small machines it often can't load a model
          "models_ready": any(p.configured for k, p in llm.providers.items() if k != "ollama"),
+         "live": live_limits(),
          "private_docs_default": SETTINGS.private_docs,
          "preview": os.environ.get("WHYCHAIN_PREVIEW") == "1",
          "as_of": ds.as_of, "company": manifest.get("company"), "row_counts": manifest.get("row_counts", {}),
@@ -156,6 +158,55 @@ def samples(dataset: str | None = None) -> list[dict]:
     return get_dataset(dataset).samples
 
 
+# ------------------------------------------------------------------ guardrails for a public URL
+# A hosted demo must not let anyone drain the Token Factory credits. All off by default (local use):
+#   WHYCHAIN_ACCESS_CODE        live investigations need this code (header x-access-code); replays stay open
+#   WHYCHAIN_MAX_PARALLEL_RUNS  live investigations at once (default 3)
+#   WHYCHAIN_MAX_RUNS_PER_DAY   live investigations per UTC day (default unlimited)
+#   WHYCHAIN_DAILY_TOKEN_BUDGET model tokens per UTC day across all runs (default unlimited); about 40k per run
+def _limit(name: str) -> int:
+    try:
+        return int(os.environ.get(name, "0") or 0)
+    except ValueError:
+        return 0
+
+
+def _today_usage() -> tuple[int, int]:
+    """(live runs started today, model tokens they used) in this process."""
+    day = time.strftime("%Y-%m-%d", time.gmtime())
+    runs = [lv for lv in LIVE.values() if time.strftime("%Y-%m-%d", time.gmtime(lv.started)) == day]
+    tokens = sum(int(((lv.result or {}).get("llm") or {}).get("tokens") or 0) for lv in runs)
+    return len(runs), tokens
+
+
+def live_limits() -> dict:
+    runs, tokens = _today_usage()
+    return {"access_code": bool(os.environ.get("WHYCHAIN_ACCESS_CODE")),
+            "runs_today": runs, "max_runs_per_day": _limit("WHYCHAIN_MAX_RUNS_PER_DAY") or None,
+            "tokens_today": tokens, "daily_token_budget": _limit("WHYCHAIN_DAILY_TOKEN_BUDGET") or None}
+
+
+def check_live_allowed(code: str | None) -> None:
+    want = os.environ.get("WHYCHAIN_ACCESS_CODE")
+    if want and not hmac.compare_digest((code or "").strip(), want):
+        raise HTTPException(401, "This demo replays recorded investigations freely; a live investigation needs the "
+                                 "access code.")
+    running = sum(1 for lv in LIVE.values() if not lv.done)
+    if running >= (_limit("WHYCHAIN_MAX_PARALLEL_RUNS") or 3):
+        raise HTTPException(429, "Investigations are already running; try again in a few minutes.")
+    runs, tokens = _today_usage()
+    if _limit("WHYCHAIN_MAX_RUNS_PER_DAY") and runs >= _limit("WHYCHAIN_MAX_RUNS_PER_DAY"):
+        raise HTTPException(429, "Today's live investigations are used up; the recorded ones still replay.")
+    if _limit("WHYCHAIN_DAILY_TOKEN_BUDGET") and tokens >= _limit("WHYCHAIN_DAILY_TOKEN_BUDGET"):
+        raise HTTPException(429, "Today's model budget is spent; the recorded investigations still replay.")
+
+
+@app.get("/api/health")
+def health() -> dict:
+    return {"ok": True, "models_ready": any(p.configured for k, p in LLM().providers.items() if k != "ollama"),
+            "live": live_limits()}
+
+
 class NewRun(BaseModel):
     question: str = Field(min_length=8, max_length=500)
     dataset: str | None = None
@@ -163,7 +214,8 @@ class NewRun(BaseModel):
 
 
 @app.post("/api/runs")
-def start_run(body: NewRun) -> dict:
+def start_run(body: NewRun, x_access_code: str | None = Header(default=None)) -> dict:
+    check_live_allowed(x_access_code)
     tracer = Tracer()
     ds = get_dataset(body.dataset)
     live = LiveRun(tracer.run_id, body.question.strip(), ds.key)
@@ -276,7 +328,10 @@ def run_trace_file(run_id: str):
 
 
 @app.post("/api/runs/{run_id}/actions/{action_id}")
-def decide(run_id: str, action_id: str, body: Decision) -> dict:
+def decide(run_id: str, action_id: str, body: Decision, x_access_code: str | None = Header(default=None)) -> dict:
+    want = os.environ.get("WHYCHAIN_ACCESS_CODE")
+    if want and not hmac.compare_digest((x_access_code or "").strip(), want):
+        raise HTTPException(401, "Approving or rejecting actions on this demo needs the access code.")
     res = load_result(run_id)
     action = next((a for a in res.get("actions", []) if a["id"] == action_id), None)
     if not action:
@@ -491,8 +546,8 @@ def main() -> None:
     import uvicorn
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=8000)
-    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
+    ap.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     args = ap.parse_args()
     print(f"WhyChain on http://{args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")

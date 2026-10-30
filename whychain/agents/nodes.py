@@ -144,7 +144,7 @@ def findings_text(findings: list[dict], evidence: dict, verdicts: dict | None = 
 def base_context(state: dict, ctx: Ctx) -> str:
     return (f"QUESTION: {state['question']}\nTODAY: {ctx.as_of} (\"next week\" = the 7 days after today)\n\n"
             f"DATA MAP (from the Data Scout):\n{data_map_text(state.get('data_map', {}))}\n\n"
-            f"RELEVANT MEMORY (Meterless H-MEM: earlier investigations of similar questions. These are HINTS, not\n"
+            f"RELEVANT MEMORY (WhyChain memory: earlier investigations of similar questions. These are HINTS, not\n"
             f"evidence: never cite them, and never rule anything out because of them; re-check with a query):\n"
             f"{memories_text(state.get('memories', []))}")
 
@@ -157,8 +157,8 @@ def recall(state: dict, ctx: Ctx) -> dict:
     raw = [m for m in ctx.memory.recall(state["question"], k=12, kinds=["finding", "fact", "lesson"],
                                         exclude_run_id=ctx.tracer.run_id, tags=ds_tag)
            if "data_map" not in (m.get("tags") or [])]
-    # H-MEM's reference embedder is a hash mock, so recall can return findings from unrelated questions. Findings and
-    # facts are reused only when they come from a similar question; general lessons are always kept.
+    # Recall ranks by meaning, so it can still surface findings from a different question about similar things. Findings
+    # and facts are reused only when they come from a similar question; general lessons are always kept.
     mems, dropped, qcache = [], 0, {}
     for m in raw:
         if m.get("kind") == "lesson":
@@ -246,7 +246,7 @@ def scout(state: dict, ctx: Ctx) -> dict:
     dm["joins"] = verified
     dm["fingerprint"] = catalog_fingerprint(ctx)
     ctx.memory.write(ctx.tracer.run_id, agent, "fact", json.dumps(dm),
-                     {"source": "zetaris-catalog", "harness": ctx.harness.name}, 0.9, ["data_map"])
+                     {"source": f"{ctx.harness.name}-catalog", "harness": ctx.harness.name}, 0.9, ["data_map"])
     (ctx.settings.runs_dir / f"_data_map_{dm['fingerprint']}.json").write_text(json.dumps(dm, indent=1),
                                                                                encoding="utf-8")
     ctx.tracer.event("agent_end", agent, sources=len(dm.get("sources", [])), joins_verified=len(verified))
@@ -371,7 +371,7 @@ def plan(state: dict, ctx: Ctx) -> dict:
     agent = "Planner"
     rnd = state.get("round", 0) + 1
     ctx.tracer.event("agent_start", agent, round=rnd)
-    route = ctx.route   # chosen at the start of the run (Meterless Scout Intent, or the word rules)
+    route = ctx.route   # chosen at the start of the run (WhyChain's guard and word rules)
     if rnd == 1 and ctx.fixed_analyses and (route == "supply" if route else supply_kind(state["question"])):
         seng = get_supply_engine(ctx.harness)
         if seng is not None:
@@ -1290,9 +1290,9 @@ def _no_shortage(state: dict, measure: dict) -> bool:
 
 
 def why_chain(state: dict, ctx: Ctx, causes: list, held_by: dict, where: list, ruled: list, v: dict) -> None:
-    """Write the chain of 'why' to the Meterless World Model as relations: each confirmed cause of the symptom (with
+    """Write the chain of 'why' to the run's trace as relations (WhyChain folds them into the run's graph): each confirmed cause of the symptom (with
     its share), what explains a cause (a disrupted port, orders waiting for stock), where the problem sits, and what
-    was ruled out. The app draws the chain from the World Model. Only links the tests confirmed are written."""
+    was ruled out. The app draws the chain from that graph. Only links the tests confirmed are written."""
     symptom = {"type": "symptom", "name": str(state.get("symptom") or state["question"])[:160]}
     analysis = state.get("analysis", {})
     of = ("of the short units" if analysis.get("kind") == "supply" else
@@ -1746,7 +1746,7 @@ def remember(state: dict, ctx: Ctx) -> dict:
                 "evidence_ids": f["evidence_ids"], "question": state["question"]}
         is_cause = v.get(f["task_id"], {}).get("is_cause", True)
         if f.get("context_only"):
-            # private documents: memory recall embeds text on NVIDIA's cloud, so the record's quotes stay out of it
+            # private documents: memory recall embeds text in the cloud (Token Factory), so the record's quotes stay out of it
             if getattr(ctx.llm, "private_docs", False):
                 continue
             # the written record, as context: keep only what was verified (the quotes), not the model's summary

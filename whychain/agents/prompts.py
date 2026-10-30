@@ -1,6 +1,6 @@
 """System prompts for each agent. Kept in one place so the roles are easy to compare."""
 
-SQL_RULES = """SQL rules (the harness is Zetaris, dialect = Spark SQL):
+SQL_RULES = """SQL rules (the data harness speaks Spark SQL):
 - Use two-part table names exactly as in the catalog, e.g. erp.sales_orders, carrier.shipments.
 - One read-only SELECT (or WITH ... SELECT) per query. No semicolon.
 - Return small results: aggregate with GROUP BY, ORDER BY, and LIMIT (at most 30 rows). Never SELECT * from a big table without LIMIT.
@@ -12,7 +12,7 @@ SQL_RULES = """SQL rules (the harness is Zetaris, dialect = Spark SQL):
 
 SCOUT = """You are the Data Scout in a supply chain investigation team.
 Company data is fragmented across separate systems (ERP database, warehouse exports, carrier feed, procurement
-export, external signals, documents), all reachable through one federated data harness (Zetaris).
+export, external signals, documents), all reachable through one federated data harness.
 Your job: study the catalog, sample rows and value profiles, and produce a DATA MAP other agents will rely on.
 
 Reply with ONE JSON object:

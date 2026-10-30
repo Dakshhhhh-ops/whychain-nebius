@@ -64,7 +64,7 @@ export function describe(e: TraceEvent, onOpen?: (id: string) => void, plain = f
     case "run_start":
       return <>Started investigation on {code(e.harness === "zetaris" ? "Zetaris" : e.harness)}</>;
     case "agent_start":
-      if (e.agent === "Memory") return <>Recalling earlier investigations from Meterless memory</>;
+      if (e.agent === "Memory") return <>Recalling earlier investigations from memory</>;
       if (e.agent === "Data Scout") return <>Mapping the company's data sources</>;
       if (e.agent === "Planner") return <>Planning round {e.round}</>;
       if (e.agent === "Evaluator") return <>Reviewing round {e.round} findings</>;
@@ -140,13 +140,15 @@ export function describe(e: TraceEvent, onOpen?: (id: string) => void, plain = f
     case "escalation":
       return <span className="text-amber-800">Escalated {e.action_id} for approval: {(e.reasons ?? []).join("; ")}</span>;
     case "scout":
-      return e.available ? (
+      return e.guard ? (
+        <span className="text-amber-800">Refused by WhyChain's guard: {(e.flags ?? []).join(", ")}</span>
+      ) : e.available ? (
         <>
           Meterless Scout: {code(String(e.intent))} ({e.confidence}, {e.band}) → {e.route_label}
           <span className="text-slate-400"> · decided by {e.decided_by}{e.contract_id ? ` · signed contract ${String(e.contract_id).slice(-8)}` : ""}</span>
         </>
       ) : (
-        <span className="text-slate-500">Routed by WhyChain's rules to {e.route_label} (Meterless Scout not reachable)</span>
+        <span className="text-slate-500">Routed by WhyChain's rules to {e.route_label}</span>
       );
     case "preliminary":
       return <span className="font-medium text-brand-700">Preliminary answer ready, computed from the data in {e.seconds} s</span>;
@@ -200,7 +202,7 @@ export function ActivityFeed({ events, live, onOpen }: { events: TraceEvent[]; l
             <AgentAvatar agent={e.agent} />
             <div className="min-w-0 flex-1 pt-0.5">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-[12px] font-semibold text-slate-800">{technical ? e.agent : String(e.agent ?? "").replace(/ T\d+$/, "").replace(/^Scout$/, "Meterless Scout")}</span>
+                <span className="truncate text-[12px] font-semibold text-slate-800">{technical ? e.agent : String(e.agent ?? "").replace(/ T\d+$/, "").replace(/^Scout$/, "Router")}</span>
                 <span className="shrink-0 font-mono text-[10px] tabular-nums text-slate-400">{Number(e.t).toFixed(1)}s</span>
               </div>
               <div className="mt-0.5 break-words text-[12px] leading-snug text-slate-600">{node}</div>

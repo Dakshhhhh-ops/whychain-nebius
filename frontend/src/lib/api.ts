@@ -252,8 +252,39 @@ export type WorldState = {
   entities?: { id: string; type: string; name: string }[];
 };
 
+const CODE_KEY = "whychain-access-code";
+
+function savedCode(): string {
+  try {
+    return localStorage.getItem(CODE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** A hosted demo can ask for an access code before a live investigation (it spends model credits). */
+async function withAccessCode(url: string, init: RequestInit): Promise<Response> {
+  const send = (code: string) =>
+    fetch(url, { ...init, headers: { ...(init.headers as Record<string, string>), ...(code ? { "x-access-code": code } : {}) } });
+  let r = await send(savedCode());
+  if (r.status === 401) {
+    const code = window.prompt("This demo replays recorded investigations freely. A live investigation calls NVIDIA Nemotron on Nebius Token Factory and needs the access code:") ?? "";
+    if (code) {
+      r = await send(code);
+      if (r.ok) {
+        try {
+          localStorage.setItem(CODE_KEY, code);
+        } catch {
+          /* private window: ask again next time */
+        }
+      }
+    }
+  }
+  return r;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init);
+  const r = init?.method === "POST" ? await withAccessCode(url, init) : await fetch(url, init);
   if (!r.ok) {
     const body = await r.text();
     throw new Error(`${r.status} ${r.statusText}: ${body.slice(0, 200)}`);

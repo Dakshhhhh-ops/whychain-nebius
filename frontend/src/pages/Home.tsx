@@ -40,7 +40,7 @@ const SEV = {
 };
 
 const STEPS = [
-  { agent: "Data Scout", title: "Map", text: "Learns the data model from the Zetaris catalog and tests every join." },
+  { agent: "Data Scout", title: "Map", text: "Learns the data model from the SQL catalog and tests every join." },
   { agent: "Planner", title: "Plan", text: "Measures the symptom, then sets up competing explanations." },
   { agent: "Investigator 1", title: "Investigate", text: "Investigators query the data; the Doc Analyst reads documents and customer reviews." },
   { agent: "Evaluator", title: "Challenge", text: "Re-runs every query and sends weak findings back for another round." },
@@ -120,7 +120,7 @@ export function Home() {
         </div>
         <Badge tone={ov?.harness === "zetaris" ? "brand" : "slate"} className="px-2.5 py-1 text-[12px]">
           <NetworkIcon className="h-3.5 w-3.5" />
-          {ov ? (ov.harness === "zetaris" ? "Live via Zetaris" : "Local fallback harness") : "Connecting…"}
+          {ov ? (ov.harness === "zetaris" ? "Live via Zetaris" : "Live SQL over the source systems") : "Connecting…"}
         </Badge>
       </div>
 
@@ -136,7 +136,7 @@ export function Home() {
         <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-[13px] text-amber-900">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <span className="font-semibold">No AI model is set up yet.</span> Add <span className="font-mono text-[12px]">NVIDIA_API_KEY</span> to the{" "}
+            <span className="font-semibold">No AI model is set up yet.</span> Add <span className="font-mono text-[12px]">NEBIUS_API_KEY</span> (Nebius Token Factory) to the{" "}
             <span className="font-mono text-[12px]">.env</span> file and restart to run
             investigations. Everything else on this page is live.
           </div>
@@ -169,7 +169,7 @@ export function Home() {
         {nightshift && (
           <label
             className="mt-2 flex w-fit cursor-pointer items-center gap-2 text-[12px] text-slate-600"
-            title="The Document Analyst reads contracts, emails and news on this machine (Meterless Nightshift) instead of NVIDIA's cloud. The numbers are computed the same way either way."
+            title="The Document Analyst reads contracts, emails and news on this machine (a local model through Meterless Nightshift) instead of Nebius Token Factory. The numbers are computed the same way either way."
           >
             <input
               type="checkbox"

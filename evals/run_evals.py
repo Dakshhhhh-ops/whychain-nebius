@@ -23,7 +23,8 @@ from whychain.graph import investigate
 HERE = Path(__file__).resolve().parent
 
 
-MODEL_NAMES = {"nim": "Nemotron 3.5", "nim-reason": "Nemotron 3.5 (thinking)", "nim-backup": "Nemotron 3 Ultra",
+MODEL_NAMES = {"tf": "Nemotron 3 Super (TF)", "tf-reason": "Nemotron 3 Super thinking (TF)",
+               "tf-backup": "Nemotron 3 Ultra (TF)", "nim": "Nemotron 3.5", "nim-reason": "Nemotron 3.5 (thinking)", "nim-backup": "Nemotron 3 Ultra",
                "xai": "Grok", "nightshift": "Nightshift", "ollama": "Ollama"}
 
 
